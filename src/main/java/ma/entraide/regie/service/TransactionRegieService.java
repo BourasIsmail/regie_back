@@ -68,24 +68,45 @@ public class TransactionRegieService {
 
     /**
      * Create a new expense transaction in EN_ATTENTE status.
-     * No validation or deduction happens until REGION confirms.
+     * The montant is immediately deducted from encaissement.
+     * If rejected later, the montant is restored.
      */
     @Transactional
     public TransactionRegieResponse create(TransactionRegieRequest request, String createdBy) {
         Province province = provinceRepository.findById(request.getProvinceId())
                 .orElseThrow(() -> new ResourceNotFoundException("Province not found with id: " + request.getProvinceId()));
 
-        // Verify plafond exists
-        plafondRepository.findByProvinceIdAndCompteCode(request.getProvinceId(), request.getCompteCode())
+        PlafondRegie plafond = plafondRepository.findByProvinceIdAndCompteCode(request.getProvinceId(), request.getCompteCode())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Plafond not found for province " + request.getProvinceId()
                                 + " and compte code " + request.getCompteCode()));
 
-        // Create transaction in EN_ATTENTE status - no deduction yet
+        BigDecimal montant = request.getMontant();
+
+        // Validation: amount must not exceed encaissement
+        if (montant.compareTo(plafond.getPlafondEncaissement()) > 0) {
+            throw new IllegalArgumentException(
+                    "Montant exceeds encaissement disponible. Disponible: " + plafond.getPlafondEncaissement());
+        }
+
+        // Validation: amount must not exceed max per invoice
+        if (montant.compareTo(plafond.getPlafondMaxFacture()) > 0) {
+            throw new IllegalArgumentException(
+                    "Montant exceeds plafond max facture. Max: " + plafond.getPlafondMaxFacture());
+        }
+
+        // Store old encaissement for historique
+        BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
+
+        // Deduct from encaissement immediately
+        plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().subtract(montant));
+        plafondRepository.save(plafond);
+
+        // Create transaction in EN_ATTENTE status
         TransactionRegie transaction = new TransactionRegie();
         transaction.setProvince(province);
         transaction.setCompteCode(request.getCompteCode());
-        transaction.setMontant(request.getMontant());
+        transaction.setMontant(montant);
         transaction.setStatut("EN_ATTENTE");
         transaction.setFournisseur(request.getFournisseur());
         transaction.setAdresseFournisseur(request.getAdresseFournisseur());
@@ -100,11 +121,27 @@ public class TransactionRegieService {
         transaction.setCreatedBy(createdBy);
 
         TransactionRegie saved = transactionRepository.save(transaction);
+
+        // Log to historique
+        HistoriqueAlimentation historique = new HistoriqueAlimentation();
+        historique.setPlafond(plafond);
+        historique.setProvince(province);
+        historique.setMontantAlimentation(montant.negate());
+        historique.setAncienEncaissement(ancienEncaissement);
+        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
+        historique.setTypeOperation("DEPENSE_EN_ATTENTE");
+        historique.setCommentaire("Depense #" + saved.getId() + " en attente - " + request.getFournisseur());
+        historique.setCreatedBy(createdBy);
+        historiqueRepository.save(historique);
+
         return toResponse(saved);
     }
 
     /**
-     * Confirm a transaction (REGION role only). Validates and deducts the montantValide from encaissement.
+     * Confirm a transaction (REGION role only).
+     * If montantValide differs from montant, adjust encaissement accordingly.
+     * - If montantValide < montant: restore the difference to encaissement
+     * - If montantValide > montant: deduct the additional amount from encaissement
      */
     @Transactional
     public TransactionRegieResponse confirm(Long id, BigDecimal montantValide, String validatedBy) {
@@ -119,43 +156,31 @@ public class TransactionRegieService {
                         transaction.getProvince().getId(), transaction.getCompteCode())
                 .orElseThrow(() -> new ResourceNotFoundException("Plafond not found for this transaction"));
 
-        // Calculate sum of CONFIRMED transactions for this plafond
-        BigDecimal totalConfirmedDepenses = transactionRepository.findByProvinceIdAndCompteCode(
-                        transaction.getProvince().getId(), transaction.getCompteCode())
-                .stream()
-                .filter(t -> "CONFIRMEE".equals(t.getStatut()))
-                .map(t -> t.getMontantValide() != null ? t.getMontantValide() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal montantOriginal = transaction.getMontant();
+        BigDecimal difference = montantValide.subtract(montantOriginal);
 
-        // Available encaissement = plafondEncaissement - totalConfirmedDepenses
-        BigDecimal encaissementDisponible = plafond.getPlafondEncaissement().subtract(totalConfirmedDepenses);
+        // Validation: if montantValide > montant, check if we have enough encaissement for the difference
+        if (difference.compareTo(BigDecimal.ZERO) > 0) {
+            if (difference.compareTo(plafond.getPlafondEncaissement()) > 0) {
+                throw new IllegalArgumentException(
+                        "Montant valide exceeds encaissement disponible. Difference needed: " + difference
+                                + ", Available: " + plafond.getPlafondEncaissement());
+            }
+        }
 
-        // Remaining annual budget = plafondAnnuel - totalConfirmedDepenses
-        BigDecimal annuelDisponible = plafond.getPlafondAnnuel().subtract(totalConfirmedDepenses);
-
-        // Validation 1: amount must not exceed max per invoice
+        // Validation: amount must not exceed max per invoice
         if (montantValide.compareTo(plafond.getPlafondMaxFacture()) > 0) {
             throw new IllegalArgumentException(
                     "Montant valide exceeds plafond max facture. Max: " + plafond.getPlafondMaxFacture());
         }
 
-        // Validation 2: amount must not exceed available encaissement
-        if (montantValide.compareTo(encaissementDisponible) > 0) {
-            throw new IllegalArgumentException(
-                    "Montant valide exceeds encaissement disponible. Available: " + encaissementDisponible);
-        }
-
-        // Validation 3: total must not exceed annual budget
-        if (montantValide.compareTo(annuelDisponible) > 0) {
-            throw new IllegalArgumentException(
-                    "Montant valide exceeds disponible annuel. Available: " + annuelDisponible);
-        }
-
         // Store old encaissement for historique
         BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
 
-        // Deduct from encaissement
-        plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().subtract(montantValide));
+        // Adjust encaissement based on difference
+        // If montantValide < montant: add back difference (positive adjustment)
+        // If montantValide > montant: deduct difference (negative adjustment)
+        plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().subtract(difference));
         plafondRepository.save(plafond);
 
         // Update transaction
@@ -170,11 +195,11 @@ public class TransactionRegieService {
         HistoriqueAlimentation historique = new HistoriqueAlimentation();
         historique.setPlafond(plafond);
         historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(montantValide.negate());
+        historique.setMontantAlimentation(difference.negate()); // Negative if we deducted more
         historique.setAncienEncaissement(ancienEncaissement);
         historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
         historique.setTypeOperation("CONFIRMATION_DEPENSE");
-        historique.setCommentaire("Confirmation transaction #" + id + " - Montant demande: " + transaction.getMontant() + " DH, Montant valide: " + montantValide + " DH");
+        historique.setCommentaire("Confirmation transaction #" + id + " - Montant demande: " + montantOriginal + " DH, Montant valide: " + montantValide + " DH");
         historique.setCreatedBy(validatedBy);
         historiqueRepository.save(historique);
 
@@ -183,6 +208,7 @@ public class TransactionRegieService {
 
     /**
      * Reject a transaction (REGION role only).
+     * Restores the montant to encaissement since it was deducted at creation.
      */
     @Transactional
     public TransactionRegieResponse reject(Long id, String rejectedBy) {
@@ -193,11 +219,36 @@ public class TransactionRegieService {
             throw new IllegalArgumentException("Transaction is not in EN_ATTENTE status");
         }
 
+        PlafondRegie plafond = plafondRepository.findByProvinceIdAndCompteCode(
+                        transaction.getProvince().getId(), transaction.getCompteCode())
+                .orElseThrow(() -> new ResourceNotFoundException("Plafond not found for this transaction"));
+
+        BigDecimal montant = transaction.getMontant();
+        BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
+
+        // Restore montant to encaissement
+        plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().add(montant));
+        plafondRepository.save(plafond);
+
+        // Update transaction status
         transaction.setStatut("REJETEE");
         transaction.setValidatedBy(rejectedBy);
         transaction.setValidatedAt(java.time.LocalDateTime.now());
 
         TransactionRegie saved = transactionRepository.save(transaction);
+
+        // Log to historique
+        HistoriqueAlimentation historique = new HistoriqueAlimentation();
+        historique.setPlafond(plafond);
+        historique.setProvince(transaction.getProvince());
+        historique.setMontantAlimentation(montant); // Positive - restored
+        historique.setAncienEncaissement(ancienEncaissement);
+        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
+        historique.setTypeOperation("REJET_DEPENSE");
+        historique.setCommentaire("Rejet transaction #" + id + " - Montant restitue: " + montant + " DH");
+        historique.setCreatedBy(rejectedBy);
+        historiqueRepository.save(historique);
+
         return toResponse(saved);
     }
 
