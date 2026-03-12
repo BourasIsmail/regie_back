@@ -253,13 +253,19 @@ public class TransactionRegieService {
     }
 
     /**
-     * Update a transaction atomically: restore the old amount, validate the new amount,
-     * then apply the new deduction.
+     * Update a pending transaction (EN_ATTENTE only).
+     * Restores the old amount, validates the new amount, then applies the new deduction.
+     * Only DELEGATION can update their own pending transactions.
      */
     @Transactional
     public TransactionRegieResponse update(Long id, TransactionRegieRequest request, String updatedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+
+        // Only allow update if transaction is EN_ATTENTE
+        if (!"EN_ATTENTE".equals(transaction.getStatut())) {
+            throw new IllegalArgumentException("Seules les transactions en attente peuvent etre modifiees");
+        }
 
         PlafondRegie plafond = plafondRepository.findByProvinceIdAndCompteCode(
                         transaction.getProvince().getId(), transaction.getCompteCode())
