@@ -19,7 +19,7 @@ public class PlafondRegieRequest {
     private String libelle;
 
     @NotNull(message = "Plafond annuel is required")
-    @Positive(message = "Plafond annuel must be positive")
+    @PositiveOrZero(message = "Plafond annuel must be zero or positive")
     private BigDecimal plafondAnnuel;
 
     @NotNull(message = "Plafond encaissement is required")
@@ -27,7 +27,7 @@ public class PlafondRegieRequest {
     private BigDecimal plafondEncaissement;
 
     @NotNull(message = "Plafond max facture is required")
-    @Positive(message = "Plafond max facture must be positive")
+    @PositiveOrZero(message = "Plafond max facture must be zero or positive")
     private BigDecimal plafondMaxFacture;
 
     public PlafondRegieRequest() {
