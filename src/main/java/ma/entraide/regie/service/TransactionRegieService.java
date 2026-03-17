@@ -344,7 +344,9 @@ public class TransactionRegieService {
     }
 
     /**
-     * Delete a transaction and restore the amount to encaissement.
+     * Delete a transaction.
+     * - For EN_ATTENTE or CONFIRMEE: restore the montant to encaissement
+     * - For REJETEE: no restoration (amount was already restored when rejected)
      */
     @Transactional
     public void delete(Long id, String deletedBy) {
@@ -358,20 +360,33 @@ public class TransactionRegieService {
         // Store old values for historique
         BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
         BigDecimal montant = transaction.getMontant();
+        BigDecimal montantValide = transaction.getMontantValide();
+        String statut = transaction.getStatut();
 
-        // Restore amount to encaissement
-        plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().add(montant));
-        plafondRepository.save(plafond);
+        // Only restore amount if not already rejected (REJETEE already restored when rejected)
+        BigDecimal montantARestituer = BigDecimal.ZERO;
+        if (!"REJETEE".equals(statut)) {
+            // For CONFIRMEE, restore the validated amount; for EN_ATTENTE, restore the original amount
+            montantARestituer = "CONFIRMEE".equals(statut) && montantValide != null
+                    ? montantValide
+                    : montant;
+            plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().add(montantARestituer));
+            plafondRepository.save(plafond);
+        }
 
         // Log suppression to historique
         HistoriqueAlimentation historique = new HistoriqueAlimentation();
         historique.setPlafond(plafond);
         historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(montant); // Positive for restoration
+        historique.setMontantAlimentation(montantARestituer); // Zero if REJETEE
         historique.setAncienEncaissement(ancienEncaissement);
         historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
         historique.setTypeOperation("SUPPRESSION");
-        historique.setCommentaire("Suppression transaction #" + id + " - " + transaction.getFournisseur() + " - " + montant + " DH");
+        String commentaire = "Suppression transaction #" + id + " (" + statut + ") - " + transaction.getFournisseur();
+        if (montantARestituer.compareTo(BigDecimal.ZERO) > 0) {
+            commentaire += " - " + montantARestituer + " DH restitue";
+        }
+        historique.setCommentaire(commentaire);
         historique.setCreatedBy(deletedBy);
         historiqueRepository.save(historique);
 
