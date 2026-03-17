@@ -23,7 +23,7 @@ public class PlafondRegieRequest {
     private BigDecimal plafondAnnuel;
 
     @NotNull(message = "Plafond encaissement is required")
-    @Positive(message = "Plafond encaissement must be positive")
+    @PositiveOrZero(message = "Plafond encaissement must be zero or positive")
     private BigDecimal plafondEncaissement;
 
     @NotNull(message = "Plafond max facture is required")
