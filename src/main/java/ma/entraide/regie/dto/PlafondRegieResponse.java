@@ -10,6 +10,7 @@ public class PlafondRegieResponse {
     private String compteCode;
     private String libelle;
     private BigDecimal plafondAnnuel;
+    private BigDecimal budgetAnnuelInitial;
     private BigDecimal plafondEncaissement;
     private BigDecimal plafondMaxFacture;
 
@@ -17,14 +18,15 @@ public class PlafondRegieResponse {
     }
 
     public PlafondRegieResponse(Long id, Long provinceId, String provinceName, String compteCode,
-                                String libelle, BigDecimal plafondAnnuel, BigDecimal plafondEncaissement,
-                                BigDecimal plafondMaxFacture) {
+                                String libelle, BigDecimal plafondAnnuel, BigDecimal budgetAnnuelInitial,
+                                BigDecimal plafondEncaissement, BigDecimal plafondMaxFacture) {
         this.id = id;
         this.provinceId = provinceId;
         this.provinceName = provinceName;
         this.compteCode = compteCode;
         this.libelle = libelle;
         this.plafondAnnuel = plafondAnnuel;
+        this.budgetAnnuelInitial = budgetAnnuelInitial;
         this.plafondEncaissement = plafondEncaissement;
         this.plafondMaxFacture = plafondMaxFacture;
     }
@@ -75,6 +77,14 @@ public class PlafondRegieResponse {
 
     public void setPlafondAnnuel(BigDecimal plafondAnnuel) {
         this.plafondAnnuel = plafondAnnuel;
+    }
+
+    public BigDecimal getBudgetAnnuelInitial() {
+        return budgetAnnuelInitial;
+    }
+
+    public void setBudgetAnnuelInitial(BigDecimal budgetAnnuelInitial) {
+        this.budgetAnnuelInitial = budgetAnnuelInitial;
     }
 
     public BigDecimal getPlafondEncaissement() {

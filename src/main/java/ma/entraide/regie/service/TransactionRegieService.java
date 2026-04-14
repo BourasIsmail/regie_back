@@ -209,9 +209,10 @@ public class TransactionRegieService {
     /**
      * Reject a transaction (REGION role only).
      * Restores the montant to encaissement since it was deducted at creation.
+     * @param motifRejet The reason for rejection
      */
     @Transactional
-    public TransactionRegieResponse reject(Long id, String rejectedBy) {
+    public TransactionRegieResponse reject(Long id, String motifRejet, String rejectedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
 
@@ -234,10 +235,11 @@ public class TransactionRegieService {
         transaction.setStatut("REJETEE");
         transaction.setValidatedBy(rejectedBy);
         transaction.setValidatedAt(java.time.LocalDateTime.now());
+        transaction.setMotifRejet(motifRejet);
 
         TransactionRegie saved = transactionRepository.save(transaction);
 
-        // Log to historique
+        // Log to historique with motif
         HistoriqueAlimentation historique = new HistoriqueAlimentation();
         historique.setPlafond(plafond);
         historique.setProvince(transaction.getProvince());
@@ -245,7 +247,11 @@ public class TransactionRegieService {
         historique.setAncienEncaissement(ancienEncaissement);
         historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
         historique.setTypeOperation("REJET_DEPENSE");
-        historique.setCommentaire("Rejet transaction #" + id + " - Montant restitue: " + montant + " DH");
+        String commentaire = "Rejet transaction #" + id + " - Montant restitue: " + montant + " DH";
+        if (motifRejet != null && !motifRejet.isBlank()) {
+            commentaire += " | Motif: " + motifRejet;
+        }
+        historique.setCommentaire(commentaire);
         historique.setCreatedBy(rejectedBy);
         historiqueRepository.save(historique);
 
@@ -404,6 +410,7 @@ public class TransactionRegieService {
                 t.getStatut(),
                 t.getValidatedBy(),
                 t.getValidatedAt(),
+                t.getMotifRejet(),
                 t.getFournisseur(),
                 t.getAdresseFournisseur(),
                 t.getFactureNumero(),

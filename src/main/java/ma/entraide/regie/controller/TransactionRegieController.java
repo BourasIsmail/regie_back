@@ -73,8 +73,9 @@ public class TransactionRegieController {
 
     @PostMapping("/{id}/reject")
     public ResponseEntity<TransactionRegieResponse> reject(@PathVariable Long id,
+                                                           @RequestParam(required = false) String motif,
                                                            Authentication authentication) {
         String rejectedBy = authentication.getName();
-        return ResponseEntity.ok(transactionService.reject(id, rejectedBy));
+        return ResponseEntity.ok(transactionService.reject(id, motif, rejectedBy));
     }
 }

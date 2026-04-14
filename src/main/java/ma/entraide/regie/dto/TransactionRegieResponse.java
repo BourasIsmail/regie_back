@@ -15,6 +15,7 @@ public class TransactionRegieResponse {
     private String statut;
     private String validatedBy;
     private LocalDateTime validatedAt;
+    private String motifRejet;
     private String fournisseur;
     private String adresseFournisseur;
     private String factureNumero;
@@ -33,7 +34,7 @@ public class TransactionRegieResponse {
 
     public TransactionRegieResponse(Long id, Long provinceId, String provinceName, String compteCode,
                                     BigDecimal montant, BigDecimal montantValide, String statut,
-                                    String validatedBy, LocalDateTime validatedAt,
+                                    String validatedBy, LocalDateTime validatedAt, String motifRejet,
                                     String fournisseur, String adresseFournisseur,
                                     String factureNumero, LocalDate factureDate, String numeroAp,
                                     LocalDate dateAp, String moisAnnee, String typeTransaction,
@@ -48,6 +49,7 @@ public class TransactionRegieResponse {
         this.statut = statut;
         this.validatedBy = validatedBy;
         this.validatedAt = validatedAt;
+        this.motifRejet = motifRejet;
         this.fournisseur = fournisseur;
         this.adresseFournisseur = adresseFournisseur;
         this.factureNumero = factureNumero;
@@ -132,6 +134,14 @@ public class TransactionRegieResponse {
 
     public void setValidatedAt(LocalDateTime validatedAt) {
         this.validatedAt = validatedAt;
+    }
+
+    public String getMotifRejet() {
+        return motifRejet;
+    }
+
+    public void setMotifRejet(String motifRejet) {
+        this.motifRejet = motifRejet;
     }
 
     public String getFournisseur() {
@@ -230,4 +240,3 @@ public class TransactionRegieResponse {
         this.createdAt = createdAt;
     }
 }
-

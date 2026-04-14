@@ -26,6 +26,9 @@ public class PlafondRegie {
     @Column(name = "plafond_annuel", nullable = false, precision = 15, scale = 2)
     private BigDecimal plafondAnnuel;
 
+    @Column(name = "budget_annuel_initial", precision = 15, scale = 2)
+    private BigDecimal budgetAnnuelInitial;
+
     @Column(name = "plafond_encaissement", nullable = false, precision = 15, scale = 2)
     private BigDecimal plafondEncaissement;
 
@@ -84,6 +87,14 @@ public class PlafondRegie {
 
     public void setPlafondAnnuel(BigDecimal plafondAnnuel) {
         this.plafondAnnuel = plafondAnnuel;
+    }
+
+    public BigDecimal getBudgetAnnuelInitial() {
+        return budgetAnnuelInitial;
+    }
+
+    public void setBudgetAnnuelInitial(BigDecimal budgetAnnuelInitial) {
+        this.budgetAnnuelInitial = budgetAnnuelInitial;
     }
 
     public BigDecimal getPlafondEncaissement() {

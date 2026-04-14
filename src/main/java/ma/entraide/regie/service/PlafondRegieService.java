@@ -80,6 +80,12 @@ public class PlafondRegieService {
         plafond.setCompteCode(request.getCompteCode());
         plafond.setLibelle(request.getLibelle());
         plafond.setPlafondAnnuel(request.getPlafondAnnuel());
+        // Set budgetAnnuelInitial - if not provided, use plafondAnnuel as initial value
+        plafond.setBudgetAnnuelInitial(
+                request.getBudgetAnnuelInitial() != null
+                        ? request.getBudgetAnnuelInitial()
+                        : request.getPlafondAnnuel()
+        );
         plafond.setPlafondEncaissement(request.getPlafondEncaissement());
         plafond.setPlafondMaxFacture(request.getPlafondMaxFacture());
 
@@ -99,6 +105,10 @@ public class PlafondRegieService {
         plafond.setCompteCode(request.getCompteCode());
         plafond.setLibelle(request.getLibelle());
         plafond.setPlafondAnnuel(request.getPlafondAnnuel());
+        // Only update budgetAnnuelInitial if explicitly provided
+        if (request.getBudgetAnnuelInitial() != null) {
+            plafond.setBudgetAnnuelInitial(request.getBudgetAnnuelInitial());
+        }
         plafond.setPlafondEncaissement(request.getPlafondEncaissement());
         plafond.setPlafondMaxFacture(request.getPlafondMaxFacture());
 
@@ -171,6 +181,7 @@ public class PlafondRegieService {
                 plafond.getCompteCode(),
                 plafond.getLibelle(),
                 plafond.getPlafondAnnuel(),
+                plafond.getBudgetAnnuelInitial(),
                 plafond.getPlafondEncaissement(),
                 plafond.getPlafondMaxFacture()
         );

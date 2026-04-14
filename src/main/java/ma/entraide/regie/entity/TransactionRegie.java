@@ -35,6 +35,9 @@ public class TransactionRegie {
     @Column(name = "validated_at")
     private LocalDateTime validatedAt;
 
+    @Column(name = "motif_rejet", length = 500)
+    private String motifRejet;
+
     @Column(length = 255)
     private String fournisseur;
 
@@ -167,6 +170,14 @@ public class TransactionRegie {
 
     public void setValidatedAt(LocalDateTime validatedAt) {
         this.validatedAt = validatedAt;
+    }
+
+    public String getMotifRejet() {
+        return motifRejet;
+    }
+
+    public void setMotifRejet(String motifRejet) {
+        this.motifRejet = motifRejet;
     }
 
     public String getFournisseur() {

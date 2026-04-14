@@ -22,6 +22,9 @@ public class PlafondRegieRequest {
     @PositiveOrZero(message = "Plafond annuel must be zero or positive")
     private BigDecimal plafondAnnuel;
 
+    @PositiveOrZero(message = "Budget annuel initial must be zero or positive")
+    private BigDecimal budgetAnnuelInitial;
+
     @NotNull(message = "Plafond encaissement is required")
     @PositiveOrZero(message = "Plafond encaissement must be zero or positive")
     private BigDecimal plafondEncaissement;
@@ -63,6 +66,14 @@ public class PlafondRegieRequest {
 
     public void setPlafondAnnuel(BigDecimal plafondAnnuel) {
         this.plafondAnnuel = plafondAnnuel;
+    }
+
+    public BigDecimal getBudgetAnnuelInitial() {
+        return budgetAnnuelInitial;
+    }
+
+    public void setBudgetAnnuelInitial(BigDecimal budgetAnnuelInitial) {
+        this.budgetAnnuelInitial = budgetAnnuelInitial;
     }
 
     public BigDecimal getPlafondEncaissement() {
