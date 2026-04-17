@@ -16,6 +16,7 @@ public class TransactionRegieResponse {
     private String validatedBy;
     private LocalDateTime validatedAt;
     private String motifRejet;
+    private BigDecimal disponibleAnnuelSnapshot;
     private String fournisseur;
     private String adresseFournisseur;
     private String factureNumero;
@@ -142,6 +143,14 @@ public class TransactionRegieResponse {
 
     public void setMotifRejet(String motifRejet) {
         this.motifRejet = motifRejet;
+    }
+
+    public BigDecimal getDisponibleAnnuelSnapshot() {
+        return disponibleAnnuelSnapshot;
+    }
+
+    public void setDisponibleAnnuelSnapshot(BigDecimal disponibleAnnuelSnapshot) {
+        this.disponibleAnnuelSnapshot = disponibleAnnuelSnapshot;
     }
 
     public String getFournisseur() {

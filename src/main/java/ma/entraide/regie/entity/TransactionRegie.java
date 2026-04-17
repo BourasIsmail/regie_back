@@ -38,6 +38,9 @@ public class TransactionRegie {
     @Column(name = "motif_rejet", length = 500)
     private String motifRejet;
 
+    @Column(name = "disponible_annuel_snapshot", precision = 15, scale = 2)
+    private BigDecimal disponibleAnnuelSnapshot;
+
     @Column(length = 255)
     private String fournisseur;
 
@@ -178,6 +181,14 @@ public class TransactionRegie {
 
     public void setMotifRejet(String motifRejet) {
         this.motifRejet = motifRejet;
+    }
+
+    public BigDecimal getDisponibleAnnuelSnapshot() {
+        return disponibleAnnuelSnapshot;
+    }
+
+    public void setDisponibleAnnuelSnapshot(BigDecimal disponibleAnnuelSnapshot) {
+        this.disponibleAnnuelSnapshot = disponibleAnnuelSnapshot;
     }
 
     public String getFournisseur() {

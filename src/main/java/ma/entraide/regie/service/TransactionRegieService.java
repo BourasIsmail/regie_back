@@ -113,8 +113,13 @@ public class TransactionRegieService {
         transaction.setFactureNumero(request.getFactureNumero());
         transaction.setFactureDate(request.getFactureDate());
         transaction.setNumeroAp(request.getNumeroAp());
-        transaction.setDateAp(request.getDateAp());
-        transaction.setMoisAnnee(request.getMoisAnnee());
+        // Auto-set dateAp = factureDate
+        transaction.setDateAp(request.getFactureDate());
+        // Auto-calculate moisAnnee from factureDate (format: yyyy-MM)
+        if (request.getFactureDate() != null) {
+            String moisAnnee = request.getFactureDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
+            transaction.setMoisAnnee(moisAnnee);
+        }
         transaction.setTypeTransaction(request.getTypeTransaction());
         transaction.setDescription(request.getDescription());
         transaction.setDateTransaction(request.getDateTransaction());
@@ -183,11 +188,24 @@ public class TransactionRegieService {
         plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().subtract(difference));
         plafondRepository.save(plafond);
 
+        // Calculate disponibleAnnuelSnapshot = budgetAnnuelInitial - total confirmed/pending transactions (except this one)
+        BigDecimal budgetAnnuelInitial = plafond.getBudgetAnnuelInitial() != null
+                ? plafond.getBudgetAnnuelInitial()
+                : plafond.getPlafondAnnuel();
+        BigDecimal totalOtherDepenses = transactionRepository.findByProvinceIdAndCompteCode(
+                        transaction.getProvince().getId(), transaction.getCompteCode())
+                .stream()
+                .filter(t -> !t.getId().equals(id) && ("CONFIRMEE".equals(t.getStatut()) || "EN_ATTENTE".equals(t.getStatut())))
+                .map(t -> "CONFIRMEE".equals(t.getStatut()) && t.getMontantValide() != null ? t.getMontantValide() : t.getMontant())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal disponibleAnnuelSnapshot = budgetAnnuelInitial.subtract(totalOtherDepenses);
+
         // Update transaction
         transaction.setMontantValide(montantValide);
         transaction.setStatut("CONFIRMEE");
         transaction.setValidatedBy(validatedBy);
         transaction.setValidatedAt(java.time.LocalDateTime.now());
+        transaction.setDisponibleAnnuelSnapshot(disponibleAnnuelSnapshot);
 
         TransactionRegie saved = transactionRepository.save(transaction);
 
@@ -326,11 +344,19 @@ public class TransactionRegieService {
         transaction.setFactureNumero(request.getFactureNumero());
         transaction.setFactureDate(request.getFactureDate());
         transaction.setNumeroAp(request.getNumeroAp());
-        transaction.setDateAp(request.getDateAp());
-        transaction.setMoisAnnee(request.getMoisAnnee());
+        // Auto-set dateAp = factureDate
+        transaction.setDateAp(request.getFactureDate());
+        // Auto-calculate moisAnnee from factureDate (format: yyyy-MM)
+        if (request.getFactureDate() != null) {
+            String moisAnnee = request.getFactureDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
+            transaction.setMoisAnnee(moisAnnee);
+        }
         transaction.setTypeTransaction(request.getTypeTransaction());
         transaction.setDescription(request.getDescription());
-        transaction.setDateTransaction(request.getDateTransaction());
+        // Only update dateTransaction if provided, otherwise keep original
+        if (request.getDateTransaction() != null) {
+            transaction.setDateTransaction(request.getDateTransaction());
+        }
 
         TransactionRegie updated = transactionRepository.save(transaction);
 
@@ -400,7 +426,7 @@ public class TransactionRegieService {
     }
 
     private TransactionRegieResponse toResponse(TransactionRegie t) {
-        return new TransactionRegieResponse(
+        TransactionRegieResponse response = new TransactionRegieResponse(
                 t.getId(),
                 t.getProvince().getId(),
                 t.getProvince().getName(),
@@ -424,5 +450,7 @@ public class TransactionRegieService {
                 t.getCreatedBy(),
                 t.getCreatedAt()
         );
+        response.setDisponibleAnnuelSnapshot(t.getDisponibleAnnuelSnapshot());
+        return response;
     }
 }
