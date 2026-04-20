@@ -125,6 +125,20 @@ public class TransactionRegieService {
         transaction.setDateTransaction(request.getDateTransaction());
         transaction.setCreatedBy(createdBy);
 
+        // Calculate and store disponibleAnnuelSnapshot at creation time
+        // = budgetAnnuelInitial - total of all confirmed transactions for this compte
+        BigDecimal budgetAnnuelInitial = plafond.getBudgetAnnuelInitial() != null
+                ? plafond.getBudgetAnnuelInitial()
+                : plafond.getPlafondAnnuel();
+        BigDecimal totalConfirmed = transactionRepository.findByProvinceIdAndCompteCode(
+                        province.getId(), request.getCompteCode())
+                .stream()
+                .filter(t -> "CONFIRMEE".equals(t.getStatut()))
+                .map(t -> t.getMontantValide() != null ? t.getMontantValide() : t.getMontant())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal disponibleSnapshot = budgetAnnuelInitial.subtract(totalConfirmed);
+        transaction.setDisponibleAnnuelSnapshot(disponibleSnapshot);
+
         TransactionRegie saved = transactionRepository.save(transaction);
 
         // Log to historique
@@ -188,24 +202,11 @@ public class TransactionRegieService {
         plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().subtract(difference));
         plafondRepository.save(plafond);
 
-        // Calculate disponibleAnnuelSnapshot = budgetAnnuelInitial - total confirmed/pending transactions (except this one)
-        BigDecimal budgetAnnuelInitial = plafond.getBudgetAnnuelInitial() != null
-                ? plafond.getBudgetAnnuelInitial()
-                : plafond.getPlafondAnnuel();
-        BigDecimal totalOtherDepenses = transactionRepository.findByProvinceIdAndCompteCode(
-                        transaction.getProvince().getId(), transaction.getCompteCode())
-                .stream()
-                .filter(t -> !t.getId().equals(id) && ("CONFIRMEE".equals(t.getStatut()) || "EN_ATTENTE".equals(t.getStatut())))
-                .map(t -> "CONFIRMEE".equals(t.getStatut()) && t.getMontantValide() != null ? t.getMontantValide() : t.getMontant())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal disponibleAnnuelSnapshot = budgetAnnuelInitial.subtract(totalOtherDepenses);
-
-        // Update transaction
+        // Update transaction (disponibleAnnuelSnapshot is already set at creation time)
         transaction.setMontantValide(montantValide);
         transaction.setStatut("CONFIRMEE");
         transaction.setValidatedBy(validatedBy);
         transaction.setValidatedAt(java.time.LocalDateTime.now());
-        transaction.setDisponibleAnnuelSnapshot(disponibleAnnuelSnapshot);
 
         TransactionRegie saved = transactionRepository.save(transaction);
 
