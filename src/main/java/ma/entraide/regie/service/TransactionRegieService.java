@@ -126,17 +126,17 @@ public class TransactionRegieService {
         transaction.setCreatedBy(createdBy);
 
         // Calculate and store disponibleAnnuelSnapshot at creation time
-        // = budgetAnnuelInitial - total of all confirmed transactions for this compte
+        // = budgetAnnuelInitial - total of all confirmed AND pending transactions for this compte
         BigDecimal budgetAnnuelInitial = plafond.getBudgetAnnuelInitial() != null
                 ? plafond.getBudgetAnnuelInitial()
                 : plafond.getPlafondAnnuel();
-        BigDecimal totalConfirmed = transactionRepository.findByProvinceIdAndCompteCode(
+        BigDecimal totalDepenses = transactionRepository.findByProvinceIdAndCompteCode(
                         province.getId(), request.getCompteCode())
                 .stream()
-                .filter(t -> "CONFIRMEE".equals(t.getStatut()))
+                .filter(t -> "CONFIRMEE".equals(t.getStatut()) || "EN_ATTENTE".equals(t.getStatut()))
                 .map(t -> t.getMontantValide() != null ? t.getMontantValide() : t.getMontant())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal disponibleSnapshot = budgetAnnuelInitial.subtract(totalConfirmed);
+        BigDecimal disponibleSnapshot = budgetAnnuelInitial.subtract(totalDepenses);
         transaction.setDisponibleAnnuelSnapshot(disponibleSnapshot);
 
         TransactionRegie saved = transactionRepository.save(transaction);
@@ -273,6 +273,9 @@ public class TransactionRegieService {
         historique.setCommentaire(commentaire);
         historique.setCreatedBy(rejectedBy);
         historiqueRepository.save(historique);
+
+        // Recalculate disponibleAnnuelSnapshot for all transactions AFTER this one (same rubrique)
+        recalculateSnapshotsAfterRejection(transaction);
 
         return toResponse(saved);
     }
@@ -424,6 +427,51 @@ public class TransactionRegieService {
         historiqueRepository.save(historique);
 
         transactionRepository.delete(transaction);
+    }
+
+    /**
+     * Recalculate disponibleAnnuelSnapshot for all transactions AFTER the rejected one (same rubrique).
+     * This ensures subsequent transactions reflect the correct available balance.
+     */
+    private void recalculateSnapshotsAfterRejection(TransactionRegie rejectedTransaction) {
+        Long provinceId = rejectedTransaction.getProvince().getId();
+        String compteCode = rejectedTransaction.getCompteCode();
+        java.time.LocalDateTime rejectedCreatedAt = rejectedTransaction.getCreatedAt();
+
+        // Get budget initial for this plafond
+        PlafondRegie plafond = plafondRepository.findByProvinceIdAndCompteCode(provinceId, compteCode)
+                .orElse(null);
+        if (plafond == null) return;
+
+        BigDecimal budgetAnnuelInitial = plafond.getBudgetAnnuelInitial() != null
+                ? plafond.getBudgetAnnuelInitial()
+                : plafond.getPlafondAnnuel();
+
+        // Get all non-rejected transactions for this rubrique, sorted by creation date
+        java.util.List<TransactionRegie> allTransactions = transactionRepository.findByProvinceIdAndCompteCode(provinceId, compteCode)
+                .stream()
+                .filter(t -> !"REJETEE".equals(t.getStatut()))
+                .sorted((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .collect(java.util.stream.Collectors.toList());
+
+        // Recalculate snapshot for each transaction based on all previous transactions
+        BigDecimal runningTotal = BigDecimal.ZERO;
+        for (TransactionRegie t : allTransactions) {
+            // Snapshot = budgetInitial - sum of all previous transactions (confirmed or pending)
+            BigDecimal newSnapshot = budgetAnnuelInitial.subtract(runningTotal);
+
+            // Only update if the transaction was created after the rejected one
+            if (t.getCreatedAt().isAfter(rejectedCreatedAt) || t.getCreatedAt().isEqual(rejectedCreatedAt)) {
+                if (!t.getId().equals(rejectedTransaction.getId())) {
+                    t.setDisponibleAnnuelSnapshot(newSnapshot);
+                    transactionRepository.save(t);
+                }
+            }
+
+            // Add this transaction's amount to running total for next iteration
+            BigDecimal montant = t.getMontantValide() != null ? t.getMontantValide() : t.getMontant();
+            runningTotal = runningTotal.add(montant);
+        }
     }
 
     private TransactionRegieResponse toResponse(TransactionRegie t) {
