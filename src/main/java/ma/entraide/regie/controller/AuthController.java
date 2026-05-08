@@ -3,10 +3,13 @@ package ma.entraide.regie.controller;
 import jakarta.validation.Valid;
 import ma.entraide.regie.dto.AuthRequest;
 import ma.entraide.regie.dto.AuthResponse;
+import ma.entraide.regie.dto.ChangePasswordRequest;
 import ma.entraide.regie.dto.RegisterRequest;
 import ma.entraide.regie.service.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -42,5 +45,20 @@ public class AuthController {
         AuthResponse response = authService.refreshToken(refreshToken);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            Authentication authentication) {
+        String email = authentication.getName();
+        authService.changePassword(
+                email,
+                request.getCurrentPassword(),
+                request.getNewPassword(),
+                request.getConfirmPassword()
+        );
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+    }
 }
+
 

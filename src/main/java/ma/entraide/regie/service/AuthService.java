@@ -148,4 +148,29 @@ public class AuthService {
                 user.getProvince() != null ? user.getProvince().getName() : null
         );
     }
+
+    public void changePassword(String email, String currentPassword, String newPassword, String confirmPassword) {
+        // Validate new password confirmation
+        if (!newPassword.equals(confirmPassword)) {
+            throw new RuntimeException("New password and confirmation do not match");
+        }
+
+        // Find user
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+
+        // Validate new password is different from current
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new RuntimeException("New password must be different from current password");
+        }
+
+        // Update password
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 }
