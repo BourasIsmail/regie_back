@@ -49,9 +49,9 @@ public class SecurityConfig {
                         // Public endpoints for regions and provinces (accessible by all authenticated users)
                         .requestMatchers("/api/regions/**").authenticated()
                         .requestMatchers("/api/provinces/**").authenticated()
-                        .requestMatchers("/api/plafonds/**").hasAnyRole("ADMIN", "REGION", "PROV")
-                        .requestMatchers("/api/transactions/**").hasAnyRole("ADMIN", "REGION", "PROV")
-                        .requestMatchers("/api/historique/**").hasAnyRole("ADMIN", "REGION", "PROV")
+                        .requestMatchers("/api/plafonds/**").hasAnyRole("ADMIN", "REGION", "PROV", "VIEW_REGION")
+                        .requestMatchers("/api/transactions/**").hasAnyRole("ADMIN", "REGION", "PROV", "VIEW_REGION")
+                        .requestMatchers("/api/historique/**").hasAnyRole("ADMIN", "REGION", "PROV", "VIEW_REGION")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

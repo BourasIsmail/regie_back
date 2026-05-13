@@ -4,6 +4,8 @@ public enum Role {
     ADMIN,
     BUDGET,
     PROV,
-    REGION
+    REGION,
+    VIEW_REGION
 }
+
 
