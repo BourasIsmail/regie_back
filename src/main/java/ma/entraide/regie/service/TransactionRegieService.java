@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
+
 @Service
 public class TransactionRegieService {
 
@@ -305,36 +306,24 @@ public class TransactionRegieService {
         // Store old encaissement for historique
         BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
 
-        // Calculate sum of existing transactions for this plafond (excluding current transaction)
-        BigDecimal totalOtherTransactions = transactionRepository.findByProvinceIdAndCompteCode(
-                        transaction.getProvince().getId(), transaction.getCompteCode())
-                .stream()
-                .filter(t -> !t.getId().equals(id))
-                .map(TransactionRegie::getMontant)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
         // Available encaissement = current encaissement + old transaction amount (since it will be restored)
         BigDecimal encaissementDisponible = plafond.getPlafondEncaissement().add(oldMontant);
-
-        // Available annual = plafondAnnuel - totalOtherTransactions
-        BigDecimal annuelDisponible = plafond.getPlafondAnnuel().subtract(totalOtherTransactions);
 
         // Validation 1: new amount must not exceed max per invoice
         if (newMontant.compareTo(plafond.getPlafondMaxFacture()) > 0) {
             throw new IllegalArgumentException(
-                    "New montant exceeds plafond max facture. Max: " + plafond.getPlafondMaxFacture());
+                    "Le montant saisi (" + newMontant + " DH) depasse le plafond maximum par facture ("
+                            + plafond.getPlafondMaxFacture() + " DH).");
         }
 
-        // Validation 2: new amount must not exceed available encaissement
+        // Validation 2: new amount must not exceed available encaissement.
+        // Note: an expense only debits the encaissement (caisse). The annual budget
+        // (plafondAnnuel) is only reduced when alimenting the encaissement, so it must
+        // NOT be used to validate an expense here.
         if (newMontant.compareTo(encaissementDisponible) > 0) {
             throw new IllegalArgumentException(
-                    "New montant exceeds encaissement disponible. Available: " + encaissementDisponible);
-        }
-
-        // Validation 3: new amount must not exceed annual budget
-        if (newMontant.compareTo(annuelDisponible) > 0) {
-            throw new IllegalArgumentException(
-                    "New montant exceeds disponible annuel. Available: " + annuelDisponible);
+                    "Le montant saisi (" + newMontant + " DH) depasse l'encaissement disponible ("
+                            + encaissementDisponible + " DH).");
         }
 
         // Update encaissement: restore old amount then deduct new amount
