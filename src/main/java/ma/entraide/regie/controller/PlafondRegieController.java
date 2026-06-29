@@ -66,5 +66,15 @@ public class PlafondRegieController {
         String performedBy = authentication.getName();
         return ResponseEntity.ok(plafondRegieService.alimenter(id, request, performedBy));
     }
+
+    @PostMapping("/{id}/corriger")
+    public ResponseEntity<PlafondRegieResponse> corriger(@PathVariable Long id,
+                                                         @RequestParam java.math.BigDecimal nouveauEncaissement,
+                                                         @RequestParam String motif,
+                                                         Authentication authentication) {
+        String performedBy = authentication.getName();
+        return ResponseEntity.ok(plafondRegieService.corriger(id, nouveauEncaissement, motif, performedBy));
+    }
 }
+
 

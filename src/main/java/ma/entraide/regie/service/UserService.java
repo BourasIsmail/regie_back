@@ -11,6 +11,7 @@ import ma.entraide.regie.exception.ResourceNotFoundException;
 import ma.entraide.regie.repository.ProvinceRepository;
 import ma.entraide.regie.repository.RegionRepository;
 import ma.entraide.regie.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,12 +23,44 @@ public class UserService {
     private final UserRepository userRepository;
     private final RegionRepository regionRepository;
     private final ProvinceRepository provinceRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository, RegionRepository regionRepository,
-                       ProvinceRepository provinceRepository) {
+                       ProvinceRepository provinceRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.regionRepository = regionRepository;
         this.provinceRepository = provinceRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    public UserResponse createUser(UserUpdateRequest request) {
+        // Check if email already exists
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new DuplicateResourceException("Email already in use: " + request.getEmail());
+        }
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        // Encode the password before saving
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.valueOf(request.getRole().toUpperCase()));
+
+        // Handle region
+        if (request.getRegionId() != null) {
+            Region region = regionRepository.findById(request.getRegionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Region not found with id: " + request.getRegionId()));
+            user.setRegion(region);
+        }
+
+        // Handle province
+        if (request.getProvinceId() != null) {
+            Province province = provinceRepository.findById(request.getProvinceId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Province not found with id: " + request.getProvinceId()));
+            user.setProvince(province);
+        }
+
+        User saved = userRepository.save(user);
+        return toResponse(saved);
     }
 
     public List<UserResponse> getAllUsers() {
@@ -54,6 +87,11 @@ public class UserService {
 
         user.setEmail(request.getEmail());
         user.setRole(Role.valueOf(request.getRole().toUpperCase()));
+
+        // Encode password if provided (non-empty)
+        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
 
         // Handle region
         if (request.getRegionId() != null) {
@@ -96,4 +134,5 @@ public class UserService {
         );
     }
 }
+
 

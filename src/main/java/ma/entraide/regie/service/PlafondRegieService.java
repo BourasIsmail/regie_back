@@ -173,6 +173,55 @@ public class PlafondRegieService {
         return toResponse(updated);
     }
 
+    /**
+     * Corriger (adjust) the encaissement value in case of a data entry error.
+     * This allows REGION users to correct previous alimentation mistakes.
+     * - Updates plafondEncaissement directly
+     * - Adjusts plafondAnnuel to compensate
+     * - Logs the correction in historique
+     */
+    @Transactional
+    public PlafondRegieResponse corriger(Long id, BigDecimal nouveauEncaissement, String motif, String performedBy) {
+        PlafondRegie plafond = plafondRegieRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Plafond not found with id: " + id));
+
+        // Calculate the difference
+        BigDecimal ancienEncaissement = plafond.getPlafondEncaissement();
+        BigDecimal difference = nouveauEncaissement.subtract(ancienEncaissement);
+
+        // Validation: cannot increase encaissement, only correct downwards (for data entry errors)
+        if (nouveauEncaissement.compareTo(ancienEncaissement) > 0) {
+            throw new IllegalArgumentException(
+                    "La correction ne peut pas augmenter l'encaissement. Montant actuel: " + ancienEncaissement
+                            + " DH. Vous ne pouvez corriger que vers le bas pour rectifier une erreur de saisie.");
+        }
+
+        // Snapshot before
+        BigDecimal ancienAnnuel = plafond.getPlafondAnnuel();
+
+        // Apply correction: adjust encaissement and annuel inversely
+        // If we reduce encaissement (negative difference), funds return to plafondAnnuel (disponible rubrique)
+        plafond.setPlafondEncaissement(nouveauEncaissement);
+        plafond.setPlafondAnnuel(plafond.getPlafondAnnuel().subtract(difference));
+        PlafondRegie updated = plafondRegieRepository.save(plafond);
+
+        // Log to historique as correction
+        HistoriqueAlimentation historique = new HistoriqueAlimentation();
+        historique.setPlafond(updated);
+        historique.setProvince(updated.getProvince());
+        historique.setMontantAlimentation(difference.abs());
+        historique.setAncienPlafondAnnuel(ancienAnnuel);
+        historique.setNouveauPlafondAnnuel(updated.getPlafondAnnuel());
+        historique.setAncienEncaissement(ancienEncaissement);
+        historique.setNouveauEncaissement(updated.getPlafondEncaissement());
+        historique.setTypeOperation("CORRECTION");
+        historique.setCommentaire("Correction: " + motif);
+        historique.setCreatedBy(performedBy);
+        historiqueRepository.save(historique);
+
+        return toResponse(updated);
+    }
+
     private PlafondRegieResponse toResponse(PlafondRegie plafond) {
         return new PlafondRegieResponse(
                 plafond.getId(),

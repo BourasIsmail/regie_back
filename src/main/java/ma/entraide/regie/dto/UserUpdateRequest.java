@@ -10,6 +10,8 @@ public class UserUpdateRequest {
     @Email(message = "Invalid email format")
     private String email;
 
+    private String password;
+
     @NotNull(message = "Role is required")
     private String role;
 
@@ -20,8 +22,9 @@ public class UserUpdateRequest {
     public UserUpdateRequest() {
     }
 
-    public UserUpdateRequest(String email, String role, Long regionId, Long provinceId) {
+    public UserUpdateRequest(String email, String password, String role, Long regionId, Long provinceId) {
         this.email = email;
+        this.password = password;
         this.role = role;
         this.regionId = regionId;
         this.provinceId = provinceId;
@@ -33,6 +36,14 @@ public class UserUpdateRequest {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     public String getRole() {
@@ -59,4 +70,3 @@ public class UserUpdateRequest {
         this.provinceId = provinceId;
     }
 }
-

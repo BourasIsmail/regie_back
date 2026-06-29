@@ -24,6 +24,11 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
+    @PostMapping
+    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(userService.createUser(request));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserById(id));
@@ -41,4 +46,5 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 }
+
 
