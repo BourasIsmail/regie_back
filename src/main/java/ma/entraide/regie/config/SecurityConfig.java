@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/plafonds/**").hasAnyRole("ADMIN", "ADMIN_VIEW", "REGION", "PROV", "VIEW_REGION")
                         .requestMatchers("/api/transactions/**").hasAnyRole("ADMIN", "ADMIN_VIEW", "REGION", "PROV", "VIEW_REGION")
                         .requestMatchers("/api/historique/**").hasAnyRole("ADMIN", "ADMIN_VIEW", "REGION", "PROV", "VIEW_REGION")
+                        .requestMatchers("/api/situation/**").hasAnyRole("ADMIN", "ADMIN_VIEW", "REGION", "PROV", "VIEW_REGION")
+                        .requestMatchers("/api/versements/**").hasAnyRole("ADMIN", "ADMIN_VIEW", "REGION", "PROV", "VIEW_REGION")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
