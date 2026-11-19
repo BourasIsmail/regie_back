@@ -2,12 +2,12 @@ package ma.entraide.regie.service;
 
 import ma.entraide.regie.dto.TransactionRegieRequest;
 import ma.entraide.regie.dto.TransactionRegieResponse;
-import ma.entraide.regie.entity.HistoriqueAlimentation;
+import ma.entraide.regie.entity.JournalOperation;
+import ma.entraide.regie.entity.User;
 import ma.entraide.regie.entity.PlafondRegie;
 import ma.entraide.regie.entity.Province;
 import ma.entraide.regie.entity.TransactionRegie;
 import ma.entraide.regie.exception.ResourceNotFoundException;
-import ma.entraide.regie.repository.HistoriqueAlimentationRepository;
 import ma.entraide.regie.repository.PlafondRegieRepository;
 import ma.entraide.regie.repository.ProvinceRepository;
 import ma.entraide.regie.repository.TransactionRegieRepository;
@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
@@ -25,23 +27,26 @@ public class TransactionRegieService {
     private final TransactionRegieRepository transactionRepository;
     private final PlafondRegieRepository plafondRepository;
     private final ProvinceRepository provinceRepository;
-    private final HistoriqueAlimentationRepository historiqueRepository;
+    private final JournalService journal;
+    private final CurrentUserScope scope;
+    private final ExerciceService exerciceService;
 
     public TransactionRegieService(TransactionRegieRepository transactionRepository,
                                    PlafondRegieRepository plafondRepository,
                                    ProvinceRepository provinceRepository,
-                                   HistoriqueAlimentationRepository historiqueRepository) {
+                                   JournalService journal,
+                                   CurrentUserScope scope,
+                                   ExerciceService exerciceService) {
         this.transactionRepository = transactionRepository;
         this.plafondRepository = plafondRepository;
         this.provinceRepository = provinceRepository;
-        this.historiqueRepository = historiqueRepository;
+        this.journal = journal;
+        this.scope = scope;
+        this.exerciceService = exerciceService;
     }
 
-    public List<TransactionRegieResponse> getAll() {
-        return transactionRepository.findAll()
-                .stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+    public List<TransactionRegieResponse> getAll(Integer exercice) {
+        return visible(transactionRepository.findAll(), exercice);
     }
 
     public TransactionRegieResponse getById(Long id) {
@@ -50,20 +55,26 @@ public class TransactionRegieService {
         return toResponse(transaction);
     }
 
-    public List<TransactionRegieResponse> getByProvinceId(Long provinceId) {
+    public List<TransactionRegieResponse> getByProvinceId(Long provinceId, Integer exercice) {
         if (!provinceRepository.existsById(provinceId)) {
             throw new ResourceNotFoundException("Province not found with id: " + provinceId);
         }
-        return transactionRepository.findByProvinceId(provinceId)
-                .stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return visible(transactionRepository.findByProvinceId(provinceId), exercice);
     }
 
-    public List<TransactionRegieResponse> getByRegionId(Long regionId) {
-        return transactionRepository.findByProvinceRegionId(regionId)
-                .stream()
-                .map(this::toResponse)
+    public List<TransactionRegieResponse> getByRegionId(Long regionId, Integer exercice) {
+        return visible(transactionRepository.findByProvinceRegionId(regionId), exercice);
+    }
+
+    /** Keeps the transactions the user may read, for the requested exercice (default: current one). */
+    private List<TransactionRegieResponse> visible(List<TransactionRegie> all, Integer exercice) {
+        User user = scope.current();
+        exerciceService.checkViewable(user, exercice);
+        Map<Long, Integer> years = exerciceService.currentYears();
+        return all.stream()
+                .filter(t -> scope.canReadProvince(user, t.getProvince()))
+                .filter(t -> exerciceService.matches(t.getExercice(), t.getProvince().getId(), exercice, years))
+                .map(t -> toResponse(t, years))
                 .collect(Collectors.toList());
     }
 
@@ -109,6 +120,7 @@ public class TransactionRegieService {
         transaction.setCompteCode(request.getCompteCode());
         transaction.setMontant(montant);
         transaction.setStatut("EN_ATTENTE");
+        transaction.setExercice(exerciceService.currentYear(province.getId()));
         transaction.setFournisseur(request.getFournisseur());
         transaction.setAdresseFournisseur(request.getAdresseFournisseur());
         transaction.setFactureNumero(request.getFactureNumero());
@@ -134,6 +146,7 @@ public class TransactionRegieService {
         BigDecimal totalDepenses = transactionRepository.findByProvinceIdAndCompteCode(
                         province.getId(), request.getCompteCode())
                 .stream()
+                .filter(t -> transaction.getExercice().equals(t.getExercice()))
                 .filter(t -> "CONFIRMEE".equals(t.getStatut()) || "EN_ATTENTE".equals(t.getStatut()))
                 .map(t -> t.getMontantValide() != null ? t.getMontantValide() : t.getMontant())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -143,16 +156,16 @@ public class TransactionRegieService {
         TransactionRegie saved = transactionRepository.save(transaction);
 
         // Log to historique
-        HistoriqueAlimentation historique = new HistoriqueAlimentation();
-        historique.setPlafond(plafond);
-        historique.setProvince(province);
-        historique.setMontantAlimentation(montant.negate());
-        historique.setAncienEncaissement(ancienEncaissement);
-        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
-        historique.setTypeOperation("DEPENSE_EN_ATTENTE");
-        historique.setCommentaire("Depense #" + saved.getId() + " en attente - " + request.getFournisseur());
-        historique.setCreatedBy(createdBy);
-        historiqueRepository.save(historique);
+        logTx("DEPENSE_EN_ATTENTE", saved, plafond, montant, ancienEncaissement,
+                "Depense #" + saved.getId() + " en attente - " + request.getFournisseur(),
+                new JournalService.Diff()
+                        .set("Montant", null, montant)
+                        .set("Fournisseur", null, request.getFournisseur())
+                        .set("Facture", null, request.getFactureNumero())
+                        .set("Date facture", null, request.getFactureDate())
+                        .set("Numero AP", null, request.getNumeroAp())
+                        .set("Type", null, request.getTypeTransaction())
+                        .set("Encaissement", ancienEncaissement, plafond.getPlafondEncaissement()));
 
         return toResponse(saved);
     }
@@ -167,6 +180,7 @@ public class TransactionRegieService {
     public TransactionRegieResponse confirm(Long id, BigDecimal montantValide, String validatedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+        exerciceService.assertEditable(transaction.getProvince().getId(), transaction.getExercice());
 
         if (!"EN_ATTENTE".equals(transaction.getStatut())) {
             throw new IllegalArgumentException("Transaction is not in EN_ATTENTE status");
@@ -212,16 +226,12 @@ public class TransactionRegieService {
         TransactionRegie saved = transactionRepository.save(transaction);
 
         // Log to historique
-        HistoriqueAlimentation historique = new HistoriqueAlimentation();
-        historique.setPlafond(plafond);
-        historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(difference.negate()); // Negative if we deducted more
-        historique.setAncienEncaissement(ancienEncaissement);
-        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
-        historique.setTypeOperation("CONFIRMATION_DEPENSE");
-        historique.setCommentaire("Confirmation transaction #" + id + " - Montant demande: " + montantOriginal + " DH, Montant valide: " + montantValide + " DH");
-        historique.setCreatedBy(validatedBy);
-        historiqueRepository.save(historique);
+        logTx("CONFIRMATION_DEPENSE", saved, plafond, montantValide, ancienEncaissement,
+                "Confirmation transaction #" + id + " - Montant demande: " + montantOriginal + " DH, Montant valide: " + montantValide + " DH",
+                new JournalService.Diff()
+                        .set("Statut", "EN_ATTENTE", "CONFIRMEE")
+                        .add("Montant", montantOriginal, montantValide)
+                        .set("Encaissement", ancienEncaissement, plafond.getPlafondEncaissement()));
 
         return toResponse(saved);
     }
@@ -235,6 +245,7 @@ public class TransactionRegieService {
     public TransactionRegieResponse reject(Long id, String motifRejet, String rejectedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+        exerciceService.assertEditable(transaction.getProvince().getId(), transaction.getExercice());
 
         if (!"EN_ATTENTE".equals(transaction.getStatut())) {
             throw new IllegalArgumentException("Transaction is not in EN_ATTENTE status");
@@ -260,20 +271,15 @@ public class TransactionRegieService {
         TransactionRegie saved = transactionRepository.save(transaction);
 
         // Log to historique with motif
-        HistoriqueAlimentation historique = new HistoriqueAlimentation();
-        historique.setPlafond(plafond);
-        historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(montant); // Positive - restored
-        historique.setAncienEncaissement(ancienEncaissement);
-        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
-        historique.setTypeOperation("REJET_DEPENSE");
         String commentaire = "Rejet transaction #" + id + " - Montant restitue: " + montant + " DH";
         if (motifRejet != null && !motifRejet.isBlank()) {
             commentaire += " | Motif: " + motifRejet;
         }
-        historique.setCommentaire(commentaire);
-        historique.setCreatedBy(rejectedBy);
-        historiqueRepository.save(historique);
+        logTx("REJET_DEPENSE", saved, plafond, montant, ancienEncaissement, commentaire,
+                new JournalService.Diff()
+                        .set("Statut", "EN_ATTENTE", "REJETEE")
+                        .set("Motif", null, motifRejet)
+                        .set("Encaissement", ancienEncaissement, plafond.getPlafondEncaissement()));
 
         // Recalculate disponibleAnnuelSnapshot for all transactions AFTER this one (same rubrique)
         recalculateSnapshotsAfterRejection(transaction);
@@ -290,6 +296,7 @@ public class TransactionRegieService {
     public TransactionRegieResponse update(Long id, TransactionRegieRequest request, String updatedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+        exerciceService.assertEditable(transaction.getProvince().getId(), transaction.getExercice());
 
         // Only allow update if transaction is EN_ATTENTE
         if (!"EN_ATTENTE".equals(transaction.getStatut())) {
@@ -326,6 +333,16 @@ public class TransactionRegieService {
                             + encaissementDisponible + " DH).");
         }
 
+        JournalService.Diff diff = new JournalService.Diff()
+                .add("Montant", oldMontant, newMontant)
+                .add("Fournisseur", transaction.getFournisseur(), request.getFournisseur())
+                .add("Adresse fournisseur", transaction.getAdresseFournisseur(), request.getAdresseFournisseur())
+                .add("Facture", transaction.getFactureNumero(), request.getFactureNumero())
+                .add("Date facture", transaction.getFactureDate(), request.getFactureDate())
+                .add("Numero AP", transaction.getNumeroAp(), request.getNumeroAp())
+                .add("Type", transaction.getTypeTransaction(), request.getTypeTransaction())
+                .add("Description", transaction.getDescription(), request.getDescription());
+
         // Update encaissement: restore old amount then deduct new amount
         plafond.setPlafondEncaissement(plafond.getPlafondEncaissement().add(oldMontant).subtract(newMontant));
         plafondRepository.save(plafond);
@@ -354,16 +371,9 @@ public class TransactionRegieService {
         TransactionRegie updated = transactionRepository.save(transaction);
 
         // Log modification to historique
-        HistoriqueAlimentation historique = new HistoriqueAlimentation();
-        historique.setPlafond(plafond);
-        historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(newMontant.subtract(oldMontant)); // Difference
-        historique.setAncienEncaissement(ancienEncaissement);
-        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
-        historique.setTypeOperation("MODIFICATION");
-        historique.setCommentaire("Modification transaction #" + id + " - Ancien: " + oldMontant + " DH, Nouveau: " + newMontant + " DH");
-        historique.setCreatedBy(updatedBy);
-        historiqueRepository.save(historique);
+        logTx("MODIFICATION", updated, plafond, newMontant, ancienEncaissement,
+                "Modification transaction #" + id + " - Ancien: " + oldMontant + " DH, Nouveau: " + newMontant + " DH",
+                diff.add("Encaissement", ancienEncaissement, plafond.getPlafondEncaissement()));
 
         return toResponse(updated);
     }
@@ -377,6 +387,7 @@ public class TransactionRegieService {
     public void delete(Long id, String deletedBy) {
         TransactionRegie transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+        exerciceService.assertEditable(transaction.getProvince().getId(), transaction.getExercice());
 
         PlafondRegie plafond = plafondRepository.findByProvinceIdAndCompteCode(
                         transaction.getProvince().getId(), transaction.getCompteCode())
@@ -400,20 +411,17 @@ public class TransactionRegieService {
         }
 
         // Log suppression to historique
-        HistoriqueAlimentation historique = new HistoriqueAlimentation();
-        historique.setPlafond(plafond);
-        historique.setProvince(transaction.getProvince());
-        historique.setMontantAlimentation(montantARestituer); // Zero if REJETEE
-        historique.setAncienEncaissement(ancienEncaissement);
-        historique.setNouveauEncaissement(plafond.getPlafondEncaissement());
-        historique.setTypeOperation("SUPPRESSION");
         String commentaire = "Suppression transaction #" + id + " (" + statut + ") - " + transaction.getFournisseur();
         if (montantARestituer.compareTo(BigDecimal.ZERO) > 0) {
             commentaire += " - " + montantARestituer + " DH restitue";
         }
-        historique.setCommentaire(commentaire);
-        historique.setCreatedBy(deletedBy);
-        historiqueRepository.save(historique);
+        logTx("SUPPRESSION", transaction, plafond, montantValide != null ? montantValide : montant, ancienEncaissement, commentaire,
+                new JournalService.Diff()
+                        .set("Statut", statut, null)
+                        .set("Montant", montant, null)
+                        .set("Fournisseur", transaction.getFournisseur(), null)
+                        .set("Facture", transaction.getFactureNumero(), null)
+                        .set("Encaissement", ancienEncaissement, plafond.getPlafondEncaissement()));
 
         transactionRepository.delete(transaction);
     }
@@ -439,6 +447,8 @@ public class TransactionRegieService {
         // Get all non-rejected transactions for this rubrique, sorted by creation date
         java.util.List<TransactionRegie> allTransactions = transactionRepository.findByProvinceIdAndCompteCode(provinceId, compteCode)
                 .stream()
+                .filter(t -> rejectedTransaction.getExercice() == null
+                        || rejectedTransaction.getExercice().equals(t.getExercice()))
                 .filter(t -> !"REJETEE".equals(t.getStatut()))
                 .sorted((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
                 .collect(java.util.stream.Collectors.toList());
@@ -463,7 +473,21 @@ public class TransactionRegieService {
         }
     }
 
+    private void logTx(String action, TransactionRegie t, PlafondRegie plafond, BigDecimal montant,
+                       BigDecimal ancienEncaissement, String commentaire, JournalService.Diff diff) {
+        JournalOperation j = journal.entry("TRANSACTION", action, t.getId(), t.getProvince(), plafond, t.getExercice());
+        j.setMontant(montant);
+        j.setAncienEncaissement(ancienEncaissement);
+        j.setNouveauEncaissement(plafond.getPlafondEncaissement());
+        j.setCommentaire(commentaire);
+        journal.save(j, diff);
+    }
+
     private TransactionRegieResponse toResponse(TransactionRegie t) {
+        return toResponse(t, null);
+    }
+
+    private TransactionRegieResponse toResponse(TransactionRegie t, Map<Long, Integer> years) {
         TransactionRegieResponse response = new TransactionRegieResponse(
                 t.getId(),
                 t.getProvince().getId(),
@@ -489,6 +513,11 @@ public class TransactionRegieService {
                 t.getCreatedAt()
         );
         response.setDisponibleAnnuelSnapshot(t.getDisponibleAnnuelSnapshot());
+        response.setExercice(t.getExercice());
+        int current = years != null
+                ? exerciceService.currentYear(years, t.getProvince().getId())
+                : exerciceService.currentYear(t.getProvince().getId());
+        response.setCloture(t.getExercice() != null && t.getExercice() < current);
         return response;
     }
 }

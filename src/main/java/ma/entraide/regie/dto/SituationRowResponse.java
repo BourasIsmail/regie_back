@@ -20,6 +20,7 @@ public record SituationRowResponse(
         BigDecimal disponibleEncaisse,
         BigDecimal depenses,
         BigDecimal versement,
-        BigDecimal solde
+        BigDecimal solde,
+        boolean cloture
 ) {
 }

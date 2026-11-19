@@ -23,8 +23,8 @@ public class PlafondRegieController {
     }
 
     @GetMapping
-    public ResponseEntity<List<PlafondRegieResponse>> getAll() {
-        return ResponseEntity.ok(plafondRegieService.getAll());
+    public ResponseEntity<List<PlafondRegieResponse>> getAll(@RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(plafondRegieService.getAll(exercice));
     }
 
     @GetMapping("/{id}")
@@ -33,13 +33,15 @@ public class PlafondRegieController {
     }
 
     @GetMapping("/province/{provinceId}")
-    public ResponseEntity<List<PlafondRegieResponse>> getByProvince(@PathVariable Long provinceId) {
-        return ResponseEntity.ok(plafondRegieService.getByProvinceId(provinceId));
+    public ResponseEntity<List<PlafondRegieResponse>> getByProvince(@PathVariable Long provinceId,
+                                                                      @RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(plafondRegieService.getByProvinceId(provinceId, exercice));
     }
 
     @GetMapping("/region/{regionId}")
-    public ResponseEntity<List<PlafondRegieResponse>> getByRegion(@PathVariable Long regionId) {
-        return ResponseEntity.ok(plafondRegieService.getByRegionId(regionId));
+    public ResponseEntity<List<PlafondRegieResponse>> getByRegion(@PathVariable Long regionId,
+                                                                    @RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(plafondRegieService.getByRegionId(regionId, exercice));
     }
 
     @PostMapping

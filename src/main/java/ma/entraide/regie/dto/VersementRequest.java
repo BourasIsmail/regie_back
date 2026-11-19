@@ -13,6 +13,8 @@ public record VersementRequest(
         BigDecimal montant,
         LocalDate dateVersement,
         @Size(max = 100) String reference,
-        @Size(max = 500) String commentaire
+        @Size(max = 500) String commentaire,
+        @jakarta.validation.constraints.Pattern(regexp = "VERSEMENT|ANNULATION", message = "Type invalide (VERSEMENT ou ANNULATION)")
+        String type
 ) {
 }

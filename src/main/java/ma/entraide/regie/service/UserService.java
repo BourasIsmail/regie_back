@@ -24,9 +24,12 @@ public class UserService {
     private final RegionRepository regionRepository;
     private final ProvinceRepository provinceRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JournalService journal;
 
     public UserService(UserRepository userRepository, RegionRepository regionRepository,
-                       ProvinceRepository provinceRepository, PasswordEncoder passwordEncoder) {
+                       ProvinceRepository provinceRepository, PasswordEncoder passwordEncoder,
+                       JournalService journal) {
+        this.journal = journal;
         this.userRepository = userRepository;
         this.regionRepository = regionRepository;
         this.provinceRepository = provinceRepository;
@@ -60,6 +63,10 @@ public class UserService {
         }
 
         User saved = userRepository.save(user);
+        logUser("CREATION", saved, new JournalService.Diff()
+                .set("Email", null, saved.getEmail()).set("Role", null, saved.getRole())
+                .set("Region", null, before(saved.getRegion()))
+                .set("Province", null, before(saved.getProvince())));
         return toResponse(saved);
     }
 
@@ -85,11 +92,17 @@ public class UserService {
             throw new DuplicateResourceException("Email already in use: " + request.getEmail());
         }
 
+        Region oldRegion = user.getRegion();
+        Province oldProvince = user.getProvince();
+        JournalService.Diff diff = new JournalService.Diff()
+                .add("Email", user.getEmail(), request.getEmail())
+                .add("Role", user.getRole(), Role.valueOf(request.getRole().toUpperCase()));
         user.setEmail(request.getEmail());
         user.setRole(Role.valueOf(request.getRole().toUpperCase()));
 
         // Encode password if provided (non-empty)
         if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+            diff.set("Mot de passe", "***", "*** (modifie)");
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
@@ -111,7 +124,10 @@ public class UserService {
             user.setProvince(null);
         }
 
+        diff.add("Region", before(oldRegion), before(user.getRegion()));
+        diff.add("Province", before(oldProvince), before(user.getProvince()));
         User updated = userRepository.save(user);
+        logUser("MODIFICATION", updated, diff);
         return toResponse(updated);
     }
 
@@ -119,7 +135,12 @@ public class UserService {
         if (!userRepository.existsById(id)) {
             throw new ResourceNotFoundException("User not found with id: " + id);
         }
+        User old = userRepository.findById(id).orElse(null);
         userRepository.deleteById(id);
+        if (old != null) {
+            logUser("SUPPRESSION", old, new JournalService.Diff()
+                    .set("Email", old.getEmail(), null).set("Role", old.getRole(), null));
+        }
     }
 
     private UserResponse toResponse(User user) {
@@ -133,6 +154,23 @@ public class UserService {
                 user.getProvince() != null ? user.getProvince().getName() : null
         );
     }
+
+    private String before(Region r) {
+        return r == null ? null : r.getName();
+    }
+
+    private String before(Province p) {
+        return p == null ? null : p.getName();
+    }
+
+    private void logUser(String action, User user, JournalService.Diff diff) {
+        var j = journal.entry("UTILISATEUR", action, user.getId(), user.getProvince(), null,
+                java.time.LocalDate.now().getYear());
+        if (user.getRegion() != null) {
+            j.setRegionId(user.getRegion().getId());
+            j.setRegionName(user.getRegion().getName());
+        }
+        j.setCommentaire(action + " utilisateur " + user.getEmail());
+        journal.save(j, diff);
+    }
 }
-
-
