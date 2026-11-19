@@ -36,6 +36,31 @@ public class CurrentUserScope {
         };
     }
 
+    /** The authenticated user of the current request. */
+    public User current() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new AccessDeniedException("Utilisateur non authentifie");
+        }
+        return load(auth.getName());
+    }
+
+    public boolean canReadProvince(User user, ma.entraide.regie.entity.Province province) {
+        return switch (user.getRole()) {
+            case ADMIN, ADMIN_VIEW -> true;
+            case REGION, VIEW_REGION -> user.getRegion() != null && province.getRegion() != null
+                    && user.getRegion().getId().equals(province.getRegion().getId());
+            case PROV -> user.getProvince() != null && user.getProvince().getId().equals(province.getId());
+            default -> false;
+        };
+    }
+
+    /** Closed exercices can be consulted by admins and by regional profiles (their region only). */
+    public boolean canViewClosedExercices(User user) {
+        return user.getRole() == Role.ADMIN || user.getRole() == Role.ADMIN_VIEW
+                || user.getRole() == Role.REGION || user.getRole() == Role.VIEW_REGION;
+    }
+
     public boolean canWrite(User user) {
         return user.getRole() == Role.ADMIN || user.getRole() == Role.REGION || user.getRole() == Role.PROV;
     }

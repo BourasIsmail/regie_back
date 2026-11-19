@@ -23,8 +23,9 @@ public class VersementController {
 
     @GetMapping
     public ResponseEntity<List<VersementResponse>> list(@RequestParam(required = false) Long plafondId,
+                                                        @RequestParam(required = false) Integer exercice,
                                                         Authentication authentication) {
-        return ResponseEntity.ok(versementService.list(authentication.getName(), plafondId));
+        return ResponseEntity.ok(versementService.list(authentication.getName(), plafondId, exercice));
     }
 
     @PostMapping("/plafond/{plafondId}")

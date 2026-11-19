@@ -17,8 +17,16 @@ public record VersementResponse(
         String reference,
         String commentaire,
         String createdBy,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String type,
+        Integer exercice,
+        boolean cloture
 ) {
+    public VersementResponse withCloture(boolean cloture) {
+        return new VersementResponse(id, plafondId, provinceId, provinceName, compteCode, montant, dateVersement,
+                reference, commentaire, createdBy, createdAt, type, exercice, cloture);
+    }
+
     public static VersementResponse from(Versement v) {
         return new VersementResponse(
                 v.getId(),
@@ -31,6 +39,9 @@ public record VersementResponse(
                 v.getReference(),
                 v.getCommentaire(),
                 v.getCreatedBy(),
-                v.getCreatedAt());
+                v.getCreatedAt(),
+                v.getType(),
+                v.getExercice(),
+                false);
     }
 }

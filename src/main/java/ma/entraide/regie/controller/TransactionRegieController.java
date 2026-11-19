@@ -22,8 +22,8 @@ public class TransactionRegieController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TransactionRegieResponse>> getAll() {
-        return ResponseEntity.ok(transactionService.getAll());
+    public ResponseEntity<List<TransactionRegieResponse>> getAll(@RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(transactionService.getAll(exercice));
     }
 
     @GetMapping("/{id}")
@@ -32,13 +32,15 @@ public class TransactionRegieController {
     }
 
     @GetMapping("/province/{provinceId}")
-    public ResponseEntity<List<TransactionRegieResponse>> getByProvince(@PathVariable Long provinceId) {
-        return ResponseEntity.ok(transactionService.getByProvinceId(provinceId));
+    public ResponseEntity<List<TransactionRegieResponse>> getByProvince(@PathVariable Long provinceId,
+                                                                           @RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(transactionService.getByProvinceId(provinceId, exercice));
     }
 
     @GetMapping("/region/{regionId}")
-    public ResponseEntity<List<TransactionRegieResponse>> getByRegion(@PathVariable Long regionId) {
-        return ResponseEntity.ok(transactionService.getByRegionId(regionId));
+    public ResponseEntity<List<TransactionRegieResponse>> getByRegion(@PathVariable Long regionId,
+                                                                         @RequestParam(required = false) Integer exercice) {
+        return ResponseEntity.ok(transactionService.getByRegionId(regionId, exercice));
     }
 
     @PostMapping

@@ -102,4 +102,24 @@ public class PlafondRegieResponse {
     public void setPlafondMaxFacture(BigDecimal plafondMaxFacture) {
         this.plafondMaxFacture = plafondMaxFacture;
     }
+
+    private Integer exercice;
+    private boolean cloture;
+
+    public Integer getExercice() {
+        return exercice;
+    }
+
+    public void setExercice(Integer exercice) {
+        this.exercice = exercice;
+    }
+
+    public boolean isCloture() {
+        return cloture;
+    }
+
+    public void setCloture(boolean cloture) {
+        this.cloture = cloture;
+    }
+
 }

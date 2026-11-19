@@ -286,4 +286,16 @@ public class TransactionRegie {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
+    @Column(name = "exercice")
+    private Integer exercice;
+
+    public Integer getExercice() {
+        return exercice;
+    }
+
+    public void setExercice(Integer exercice) {
+        this.exercice = exercice;
+    }
+
 }

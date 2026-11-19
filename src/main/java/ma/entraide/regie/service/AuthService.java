@@ -29,6 +29,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
+    private final JournalService journal;
 
     public AuthService(UserRepository userRepository,
                        RegionRepository regionRepository,
@@ -36,7 +37,9 @@ public class AuthService {
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        AuthenticationManager authenticationManager,
-                       CustomUserDetailsService userDetailsService) {
+                       CustomUserDetailsService userDetailsService,
+                       JournalService journal) {
+        this.journal = journal;
         this.userRepository = userRepository;
         this.regionRepository = regionRepository;
         this.provinceRepository = provinceRepository;
@@ -76,6 +79,8 @@ public class AuthService {
         }
 
         userRepository.save(user);
+        logAuth("CREATION", user, "Inscription utilisateur " + user.getEmail(),
+                new JournalService.Diff().set("Email", null, user.getEmail()).set("Role", null, user.getRole()));
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String accessToken = jwtUtil.generateAccessToken(userDetails);
@@ -172,5 +177,19 @@ public class AuthService {
         // Update password
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+        logAuth("CHANGEMENT_MOT_DE_PASSE", user, "Changement de mot de passe par " + user.getEmail(),
+                new JournalService.Diff().set("Mot de passe", "***", "*** (modifie)"));
+    }
+
+    private void logAuth(String action, User user, String commentaire, JournalService.Diff diff) {
+        var j = journal.entry("UTILISATEUR", action, user.getId(), user.getProvince(), null,
+                java.time.LocalDate.now().getYear());
+        if (user.getRegion() != null) {
+            j.setRegionId(user.getRegion().getId());
+            j.setRegionName(user.getRegion().getName());
+        }
+        j.setCreatedBy(user.getEmail());
+        j.setCommentaire(commentaire);
+        journal.save(j, diff);
     }
 }

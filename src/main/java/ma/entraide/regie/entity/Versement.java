@@ -129,4 +129,28 @@ public class Versement {
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
+    /** VERSEMENT or ANNULATION: both reduce the solde and the encaissement the same way. */
+    @Column(name = "type_versement", length = 20)
+    private String type = "VERSEMENT";
+
+    @Column(name = "exercice")
+    private Integer exercice;
+
+    public String getType() {
+        return type == null ? "VERSEMENT" : type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public Integer getExercice() {
+        return exercice;
+    }
+
+    public void setExercice(Integer exercice) {
+        this.exercice = exercice;
+    }
+
 }

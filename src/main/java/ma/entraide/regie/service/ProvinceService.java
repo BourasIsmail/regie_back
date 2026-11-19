@@ -18,7 +18,11 @@ public class ProvinceService {
     private final ProvinceRepository provinceRepository;
     private final RegionRepository regionRepository;
 
-    public ProvinceService(ProvinceRepository provinceRepository, RegionRepository regionRepository) {
+    private final JournalService journal;
+
+    public ProvinceService(ProvinceRepository provinceRepository, RegionRepository regionRepository,
+                           JournalService journal) {
+        this.journal = journal;
         this.provinceRepository = provinceRepository;
         this.regionRepository = regionRepository;
     }
@@ -54,6 +58,8 @@ public class ProvinceService {
         province.setName(request.getName());
         province.setRegion(region);
         Province saved = provinceRepository.save(province);
+        logProvince("CREATION", saved, new JournalService.Diff()
+                .set("Nom", null, saved.getName()).set("Region", null, region.getName()));
         return toResponse(saved);
     }
 
@@ -64,9 +70,13 @@ public class ProvinceService {
         Region region = regionRepository.findById(request.getRegionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Region not found with id: " + request.getRegionId()));
 
+        JournalService.Diff diff = new JournalService.Diff()
+                .add("Nom", province.getName(), request.getName())
+                .add("Region", province.getRegion() != null ? province.getRegion().getName() : null, region.getName());
         province.setName(request.getName());
         province.setRegion(region);
         Province updated = provinceRepository.save(province);
+        logProvince("MODIFICATION", updated, diff);
         return toResponse(updated);
     }
 
@@ -74,7 +84,11 @@ public class ProvinceService {
         if (!provinceRepository.existsById(id)) {
             throw new ResourceNotFoundException("Province not found with id: " + id);
         }
+        Province old = provinceRepository.findById(id).orElse(null);
         provinceRepository.deleteById(id);
+        if (old != null) {
+            logProvince("SUPPRESSION", old, new JournalService.Diff().set("Nom", old.getName(), null));
+        }
     }
 
     private ProvinceResponse toResponse(Province province) {
@@ -85,5 +99,10 @@ public class ProvinceService {
                 province.getRegion().getName()
         );
     }
-}
 
+    private void logProvince(String action, Province province, JournalService.Diff diff) {
+        var j = journal.entry("PROVINCE", action, province.getId(), province, null, java.time.LocalDate.now().getYear());
+        j.setCommentaire(action + " province " + province.getName());
+        journal.save(j, diff);
+    }
+}
